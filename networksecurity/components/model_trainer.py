@@ -22,6 +22,10 @@ from sklearn.ensemble import (
     GradientBoostingClassifier,
     RandomForestClassifier
 )
+import mlflow
+import dagshub
+dagshub.init(repo_owner='jeet44195', repo_name='network_security', mlflow=True)
+
 
 
 
@@ -34,6 +38,24 @@ class ModelTrainer:
             self.data_transformation_artifact=data_transformation_artifact
         except Exception as e:
             raise NetworkSecurityException(e,sys)
+
+    def track_mlflow(self,best_model,classificationmetric):
+        with mlflow.start_run():
+            f1_score=classificationmetric.f1_score
+            precision_score=classificationmetric.precision_score
+            recall_score=classificationmetric.recall_score
+
+            mlflow.log_metric("f1_score",f1_score)
+            mlflow.log_metric("precision",precision_score)
+            mlflow.log_metric("recall_score",recall_score)
+            mlflow.sklearn.log_model(best_model,"model")
+
+
+
+
+
+
+
 
     def train_model(self,x_train,y_train,x_test,y_test):
         models={
@@ -88,9 +110,11 @@ class ModelTrainer:
 
         ## track the mlflow
 
+        self.track_mlflow(best_model,classification_train_metric)
+
         y_test_pred= best_model.predict(x_test)
         classification_test_metric= get_classification_score(y_true=y_test,y_pred=y_test_pred)
-
+        self.track_mlflow(best_model,classification_test_metric)
         preprocessor = load_object(file_path=self.data_transformation_artifact.transformed_object_file_path)
 
         model_dir_path = os.path.dirname(self.model_trainer_config.trained_model_file_path)
@@ -98,6 +122,7 @@ class ModelTrainer:
 
         Network_Model=NetworkModel(preprocessor=preprocessor,model=best_model)
         save_object(self.model_trainer_config.trained_model_file_path,obj=Network_Model) 
+        save_object("final_model/model.pkl",best_model)
 
         model_trainer_artifact = ModelTrainerArtifact(
     trained_model_file_path=self.model_trainer_config.trained_model_file_path,
